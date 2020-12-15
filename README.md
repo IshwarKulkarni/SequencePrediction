@@ -1,0 +1,2 @@
+Runnign simple Recurrent models on Stock data obtained from  <a href="https://iexcloud.io">Data provided by IEX Cloud</a>. You will need the API Token from that website to be passed in with `--IEX_token=` along with the config file with `--config_file`.
+Go crazy.

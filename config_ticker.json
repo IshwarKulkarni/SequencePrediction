@@ -1,0 +1,50 @@
+{
+    "trainer_config":
+    {
+        "batch_size": 8,
+        "num_workers" : 0,
+        "chckpt_dir" : "checkpts",
+        
+        "ticker" : "nvda",
+
+        "num_epochs" : 100,
+        "valdn_n_epochs" : 5,
+        "checkpt_n_epochs" : 10,
+        "log_n_iter" : 25,
+
+        "num_train_days" : 15,
+        "num_valdn_days" : 2,
+        "dataset_config":
+        {
+            "data_dir" : "data",
+            "input_features" : ["average"],
+            "output_features" : ["average"],
+            "output_seq_len" : 1,
+            "input_seq_len" : 2,
+            "frequency" : "30Min"
+        },
+
+        "optimizer_config":
+        {
+            "lr" : 0.001,
+            "eps": 1e-8
+        },
+
+        "lr_sched_config":
+        {
+            "step_size": 200,
+            "gamma": 0.9
+        },
+
+        "model_config":
+        {
+            "encoder_szs": [2],
+            "recurrent_ip_size" : 1,
+            "num_layers" : 1,
+            "rnn_hidden_size": 512,
+            "decoder_szs": [2]
+        },
+
+        "loss_reduction" : "sum"
+    }
+}
