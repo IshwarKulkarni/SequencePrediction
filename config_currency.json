@@ -5,11 +5,11 @@
         "num_workers" : 0,
         "chckpt_dir" : "checkpts",
         
-        "country" : "Australia",
+        "country" : "India",
 
-        "num_epochs" : 150,
+        "num_epochs" : 200,
         "valdn_n_epochs" : 10,
-        "checkpt_n_epochs" : 10,
+        "checkpt_n_valdn" : 3,
         "log_n_iter" : 50,
 
         "num_train_days" : 1000,
@@ -19,14 +19,15 @@
             "data_dir" : "currency_data",
             "input_features" : ["average"],
             "output_features" : ["average"],
-            "output_seq_len" : 1,
+            "output_seq_len" : 7,
             "input_seq_len" : 2
         },
 
         "optimizer_config":
         {
-            "lr" : 0.01,
-            "eps": 1e-8
+            "lr" : 2,
+            "eps": 1e-8,
+            "rho" : 0.9
         },
 
         "lr_sched_config":
@@ -37,11 +38,9 @@
 
         "model_config":
         {
-            "encoder_szs": [],
-            "recurrent_ip_size" : 1,
+            "recurrent_ip_size" : 32,
             "num_layers" : 1,
-            "rnn_hidden_size": 128,
-            "decoder_szs": [2]
+            "rnn_hidden_size": 128
         },
 
         "loss_reduction" : "mean"

@@ -49,8 +49,18 @@ class CurrencyData(Dataset):
         self._in_data = arr[-tot_days:] if num_days_to_skip == 0 else\
             arr[-tot_days:-num_days_to_skip]
 
+        self._input_scale = self._in_data.mean(0)
+        self._in_data /= self._input_scale
+
         self._num_past = input_seq_len
         self._num_future = output_seq_len
+
+    def scale(self, ip, op):
+        if ip is not None:
+            ip *= self._input_scale
+        if op is not None:
+            op *= self._input_scale
+        return ip, op
 
     def __len__(self):
         return len(self._in_data) - (self._num_past + self._num_future)
@@ -103,7 +113,7 @@ class IEXDataset(Dataset):
     ALL_FEATURES = ["high", "low", "open", "close",
                     "average", "volume", "numberOfTrades"]
 
-    def __init__(self, cl_args, ticker:str, data_dir: str,
+    def __init__(self, cl_args, ticker: str, data_dir: str,
                  num_days_to_fetch: int, num_days_to_skip: int,
                  input_features: list, output_features: list,
                  input_seq_len: int, output_seq_len: int, frequency: str):
@@ -114,8 +124,7 @@ class IEXDataset(Dataset):
         elif 'IEX_Token' in os.environ:
             self._IEX_TOKEN = os.environ['IEX_Token']
         else:
-            raise EnvironmentError(
-                'IEX_Token not found in args or envirnment varaibles')
+            raise EnvironmentError('IEX_Token not found in args or envirnment varaibles')
         self._data_dir = data_dir
         self._date_readble_fmt = '%Y/%m/%d'
         self._date_IEX_fmt = '%Y%m%d'
@@ -150,8 +159,15 @@ class IEXDataset(Dataset):
     def __getitem__(self, index):
         end_1 = index + self._num_past
         end_2 = end_1 + self._num_future
-        ip, op = self._in_data[index:end_1], self._in_data[index:end_2]
+        ip, op = self._in_data[index:end_1], self._out_data[index:end_2]
         return (torch.from_numpy(ip).float(), torch.from_numpy(op).float())
+
+    def scale(self, ip, op):
+        if ip is not None:
+            ip *= self._input_scale
+        if op is not None:
+            op *= self._output_scale
+        return ip, op
 
     def _get_from_IEX(self, date, ticker: str):
         """Fetch the data from IEX and clean up a bit"""
