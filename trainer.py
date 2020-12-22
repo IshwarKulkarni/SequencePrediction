@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -11,7 +12,7 @@ import torch.nn.functional as F
 import torch.utils.data.dataloader as dataloader
 from torch.utils.tensorboard import SummaryWriter
 
-from dataloaders import IEXDataset, CurrencyData, collate_batch_fn
+from dataloaders import CurrencyData, IEXDataset, collate_batch_fn
 from models import EncoderDecoderLSTM
 
 
@@ -53,28 +54,32 @@ class SequencePredictorTrainer():
         with open(os.path.join(self._chckpt_dir, 'config.json'), 'w') as out_config:
             json.dump({"config": config}, out_config, indent=2)
 
-        dataset_args = config['dataset_config']
+        train_dataset_args = config['dataset_config']
         model_args = config['model_config']
-        assert ('country' in config) != ('ticker' in config)
+        assert ('country' in config) != ('train_tickers' in config)
         if 'country' in config:
             model_args['ip_n_feat'] = 1
             model_args['op_n_feat'] = 1
             dataset_class = CurrencyData
-            dataset_args['country'] = self._country.upper()
+            train_dataset_args['country'] = self._country.upper()
             model_args['batch_n'] = self._batch_size
             self._name = self._country
-        elif 'ticker' in config:
-            assert 'input_features' in dataset_args and 'output_features' in dataset_args
-            model_args['ip_n_feat'] = len(dataset_args['input_features'])
-            model_args['op_n_feat'] = len(dataset_args['output_features'])
+        elif 'train_tickers' in config and 'valdn_tickers' in config:
+            assert 'input_features' in train_dataset_args and 'output_features' in train_dataset_args
+            model_args['ip_n_feat'] = len(train_dataset_args['input_features'])
+            model_args['op_n_feat'] = len(train_dataset_args['output_features'])
             model_args['batch_n'] = self._batch_size
-            dataset_args['ticker'] = self._ticker
+            train_dataset_args['tickers'] = self._train_tickers
+            train_dataset_args['shuffle_rows'] = True
+            valdn_dataset_args = copy.copy(train_dataset_args)
+            valdn_dataset_args['tickers'] = self._valdn_tickers
+            valdn_dataset_args['shuffle_rows'] = False
             dataset_class = IEXDataset
-            self._name = self._ticker
+            self._name = self._valdn_tickers
         else:
-            raise ValueError('model_config must have either "ticker" or "country"')
+            raise ValueError('model_config must have either "train_tickers" & "valdn_tickers"  or "country"')
 
-        self._num_predictions = dataset_args['output_seq_len']
+        self._num_predictions = train_dataset_args['output_seq_len']
 
         self._model = EncoderDecoderLSTM(**model_args)
 
@@ -84,9 +89,9 @@ class SequencePredictorTrainer():
         self._writer = SummaryWriter(self._chckpt_dir)
 
         # used in plotting
-        self._output_features = dataset_args['output_features']
+        self._output_features = train_dataset_args['output_features']
 
-        train_dataset = dataset_class(cl_args, **dataset_args,
+        train_dataset = dataset_class(cl_args, **train_dataset_args,
                                       num_days_to_fetch=self._num_train_days,
                                       num_days_to_skip=self._num_valdn_days)
 
@@ -96,13 +101,14 @@ class SequencePredictorTrainer():
                                                  shuffle=True,
                                                  collate_fn=collate_batch_fn)
 
-        valdn_dataset = dataset_class(cl_args, **dataset_args,
+        valdn_dataset = dataset_class(cl_args, **valdn_dataset_args,
                                       num_days_to_skip=0,
                                       num_days_to_fetch=self._num_valdn_days)
 
         self._valdn_data = dataloader.DataLoader(valdn_dataset,
                                                  batch_size=self._batch_size,
                                                  drop_last=True,
+                                                 shuffle=True,
                                                  collate_fn=collate_batch_fn)
         logger.info(f'Training with  {len(self._train_data)} batches')
         logger.info(f'Validating with {len(self._valdn_data)} batches')

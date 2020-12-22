@@ -5,7 +5,9 @@
         "num_workers" : 0,
         "chckpt_dir" : "checkpts",
         
-        "ticker" : "msft",
+        "train_tickers" : "msft, aapl",
+
+        "valdn_tickers" : "F",
 
         "num_epochs" : 200,
         "valdn_n_epochs" : 10,
@@ -17,8 +19,8 @@
         "dataset_config":
         {
             "data_dir" : "ticker_data",
-            "input_features" : ["average" , "high", "low", "close"],
-            "output_features" : ["close"],
+            "input_features" : ["average"],
+            "output_features" : ["average"],
             "output_seq_len" : 15,
             "input_seq_len" : 3,
             "frequency" : "15Min"
@@ -28,7 +30,7 @@
         {
             "lr" : 2,
             "eps": 1e-8,
-            "rho" : 0.9
+            "rho" : 0.8
         },
 
         "lr_sched_config":
@@ -39,9 +41,9 @@
 
         "model_config":
         {
-            "recurrent_ip_size" : 8,
+            "recurrent_ip_size" : 16,
             "num_layers" : 1,
-            "rnn_hidden_size": 128
+            "rnn_hidden_size": 256
         },
 
         "loss_reduction" : "mean"

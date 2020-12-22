@@ -113,7 +113,7 @@ class IEXDataset(Dataset):
     ALL_FEATURES = ["high", "low", "open", "close",
                     "average", "volume", "numberOfTrades"]
 
-    def __init__(self, cl_args, ticker: str, data_dir: str,
+    def __init__(self, cl_args, tickers: str, data_dir: str, shuffle_rows:bool,
                  num_days_to_fetch: int, num_days_to_skip: int,
                  input_features: list, output_features: list,
                  input_seq_len: int, output_seq_len: int, frequency: str):
@@ -138,10 +138,16 @@ class IEXDataset(Dataset):
         bad_features = [f for f in output_features if f not in IEXDataset.ALL_FEATURES]
         assert not bad_features, f"Some unrecognized output features requested: {bad_features}."
 
-        data = self._get_intra_day(ticker, frequency=frequency,
-                                   num_days_to_skip=num_days_to_skip,
-                                   num_days_to_fetch=num_days_to_fetch)
-        data.dropna()
+        frames = []
+        for ticker in tickers.split(','):
+            frames.append(self._get_intra_day(ticker.strip().upper(), 
+                                              frequency=frequency,
+                                              num_days_to_skip=num_days_to_skip,
+                                              num_days_to_fetch=num_days_to_fetch))
+        data = pd.concat(frames).dropna()
+        if shuffle_rows:
+            data = data.sample(frac=1).reset_index(drop=True)
+
         self._in_data = data[input_features].to_numpy().astype(np.float32)
         self._out_data = data[output_features].to_numpy().astype(np.float32)
 
