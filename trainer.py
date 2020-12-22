@@ -61,11 +61,13 @@ class SequencePredictorTrainer():
             model_args['op_n_feat'] = 1
             dataset_class = CurrencyData
             dataset_args['country'] = self._country.upper()
+            model_args['batch_n'] = self._batch_size
             self._name = self._country
         elif 'ticker' in config:
             assert 'input_features' in dataset_args and 'output_features' in dataset_args
             model_args['ip_n_feat'] = len(dataset_args['input_features'])
             model_args['op_n_feat'] = len(dataset_args['output_features'])
+            model_args['batch_n'] = self._batch_size
             dataset_args['ticker'] = self._ticker
             dataset_class = IEXDataset
             self._name = self._ticker

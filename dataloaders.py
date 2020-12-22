@@ -141,6 +141,7 @@ class IEXDataset(Dataset):
         data = self._get_intra_day(ticker, frequency=frequency,
                                    num_days_to_skip=num_days_to_skip,
                                    num_days_to_fetch=num_days_to_fetch)
+        data.dropna()
         self._in_data = data[input_features].to_numpy().astype(np.float32)
         self._out_data = data[output_features].to_numpy().astype(np.float32)
 
@@ -160,6 +161,7 @@ class IEXDataset(Dataset):
         end_1 = index + self._num_past
         end_2 = end_1 + self._num_future
         ip, op = self._in_data[index:end_1], self._out_data[index:end_2]
+        assert not np.isnan(ip).any() and not np.isnan(op).any()
         return (torch.from_numpy(ip).float(), torch.from_numpy(op).float())
 
     def scale(self, ip, op):

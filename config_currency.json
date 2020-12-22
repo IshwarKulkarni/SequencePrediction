@@ -38,7 +38,7 @@
 
         "model_config":
         {
-            "recurrent_ip_size" : 32,
+            "recurrent_ip_size" : 8,
             "num_layers" : 1,
             "rnn_hidden_size": 128
         },
