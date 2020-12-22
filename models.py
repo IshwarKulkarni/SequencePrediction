@@ -8,14 +8,14 @@ logger = logging.getLogger(__name__)
 
 class EncoderDecoderLSTM(nn.Module):
     def __init__(self, ip_n_feat: int, recurrent_ip_size: int, num_layers:int,
-                 rnn_hidden_size: int, op_n_feat: int):
+                 batch_n: int, rnn_hidden_size: int, op_n_feat: int):
         super().__init__()
 
-        self._encoder = nn.Sequential(nn.Linear(ip_n_feat, recurrent_ip_size))
+        self._encoder = nn.Linear(ip_n_feat, recurrent_ip_size)
 
         self._recurrent = nn.LSTMCell(recurrent_ip_size, rnn_hidden_size)
 
-        self._decoder = nn.Sequential(nn.Linear(rnn_hidden_size, op_n_feat))
+        self._decoder = nn.Linear(rnn_hidden_size, op_n_feat)
 
         self._rnn_hidden_size = rnn_hidden_size
         self.log()
@@ -50,20 +50,21 @@ class EncoderDecoderLSTM(nn.Module):
     def forward(self, x):
         input_seq, future_n = x
         batch_n, past_n, *_ = input_seq.shape
-        state = (torch.zeros(batch_n, self._rnn_hidden_size, dtype=torch.float32),
-                 torch.zeros(batch_n, self._rnn_hidden_size, dtype=torch.float32))
+
+        if self.training:
+            state = (torch.randn(batch_n, self._rnn_hidden_size)/15,
+                     torch.randn(batch_n, self._rnn_hidden_size)/15)
+        else:
+            state = (torch.zeros(batch_n, self._rnn_hidden_size),
+                     torch.zeros(batch_n, self._rnn_hidden_size))
 
         encoded = self._encoder(input_seq)
         rec_op = []
         for t in range(past_n):
-            state = self._recurrent(encoded[:, t, :], state)
-            output = self._decoder(state[0])
-            rec_op.append(output)
+            rec_op.append(self._recurrent(encoded[:, t, :], state)[0])
 
         for _ in range(future_n):
-            state = self._recurrent(encoded[:, -1, :], state)
-            output = self._decoder(state[0])
-            rec_op.append(output)
+            rec_op.append(self._recurrent(encoded[:, -1, :], state)[0])
 
-        output = torch.stack(rec_op, 1)
+        output = self._decoder(torch.stack(rec_op, 1))
         return output

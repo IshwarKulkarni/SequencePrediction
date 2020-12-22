@@ -1,25 +1,25 @@
 {
     "trainer_config":
     {
-        "batch_size": 8,
+        "batch_size": 16,
         "num_workers" : 0,
         "chckpt_dir" : "checkpts",
         
-        "ticker" : "nvda",
+        "ticker" : "msft",
 
         "num_epochs" : 200,
         "valdn_n_epochs" : 10,
-        "checkpt_n_valdn" : 5,
+        "checkpt_n_valdn" : 1,
         "log_n_iter" : 250,
 
         "num_train_days" : 50,
-        "num_valdn_days" : 5,
+        "num_valdn_days" : 7,
         "dataset_config":
         {
             "data_dir" : "ticker_data",
-            "input_features" : ["average" , "high", "low"],
-            "output_features" : ["average"],
-            "output_seq_len" : 6,
+            "input_features" : ["average" , "high", "low", "close"],
+            "output_features" : ["close"],
+            "output_seq_len" : 15,
             "input_seq_len" : 3,
             "frequency" : "15Min"
         },
@@ -39,7 +39,7 @@
 
         "model_config":
         {
-            "recurrent_ip_size" : 4,
+            "recurrent_ip_size" : 8,
             "num_layers" : 1,
             "rnn_hidden_size": 128
         },
