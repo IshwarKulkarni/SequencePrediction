@@ -3,3 +3,4 @@ check*/*
 .vscode
 __py*
 *.log
+log/*
