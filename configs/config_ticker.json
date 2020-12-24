@@ -1,0 +1,78 @@
+{
+    "exp_name": "single_ticker",
+    "logging_dir": "logs",
+    "trainer": {
+        "name": "trainers.sequence_predictor_trainer.SequencePredictorTrainer",
+        "args": {
+            "num_epochs": 200,
+            "valdn_n_epochs": 10,
+            "checkpt_n_valdn": 1,
+            "log_n_iter": 250,
+            "batch_size": 16,
+            "loss_reduction": "mean",
+            "num_dataloder_workers" : 0
+        }
+    },
+
+    "model": {
+        "name": "models.encoder_decoder_lstm.EncoderDecoderLSTM",
+        "args": {
+            "recurrent_ip_size": 8,
+            "num_layers": 1,
+            "rnn_hidden_size": 128
+        }
+    },
+
+    "dataset_common": {
+        "args": {
+            "input_features": ["average", "high", "low", "close"],
+            "output_features": ["close"],
+            "output_seq_len": 15,
+            "input_seq_len": 3,
+            "data_dir": "data/ticker_data",
+            "frequency": "60Min"
+        }
+    },
+
+    "train_dataset": {
+        "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
+        "args": {
+            "ticker": "msft",
+            "num_samples": 500,
+            "skip_past": 10
+        }
+    },
+
+    "valdn_dataset": {
+        "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
+        "args": {
+            "ticker": "msft",
+            "num_samples": 50,
+            "skip_past": 1
+        }
+    },
+
+    "loss" : {
+        "name" : "torch.nn.MSELoss",
+        "args" : {
+            "reduction" : "mean"
+        }
+    },
+
+    "optimizer": {
+        "name": "torch.optim.Adadelta",
+        "args": {
+            "lr": 2,
+            "eps": 1e-8,
+            "rho": 0.9
+        }
+    },
+
+    "lr_scheduler": {
+        "name": "torch.optim.lr_scheduler.StepLR",
+        "args": {
+            "step_size": 800,
+            "gamma": 0.9
+        }
+    }
+}

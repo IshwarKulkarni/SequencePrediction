@@ -7,15 +7,15 @@ logger = logging.getLogger(__name__)
 
 
 class EncoderDecoderLSTM(nn.Module):
-    def __init__(self, ip_n_feat: int, recurrent_ip_size: int, num_layers:int,
-                 batch_n: int, rnn_hidden_size: int, op_n_feat: int):
+    def __init__(self, input_n_features: int, recurrent_ip_size: int,
+                 rnn_hidden_size: int, output_n_features: int, **kwargs):
         super().__init__()
 
-        self._encoder = nn.Linear(ip_n_feat, recurrent_ip_size)
+        self._encoder = nn.Linear(input_n_features, recurrent_ip_size)
 
         self._recurrent = nn.LSTMCell(recurrent_ip_size, rnn_hidden_size)
 
-        self._decoder = nn.Linear(rnn_hidden_size, op_n_feat)
+        self._decoder = nn.Linear(rnn_hidden_size, output_n_features)
 
         self._rnn_hidden_size = rnn_hidden_size
         self.log()

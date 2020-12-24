@@ -11,108 +11,52 @@ import torch.nn.functional as F
 import torch.utils.data.dataloader as dataloader
 from torch.utils.tensorboard import SummaryWriter
 
-from dataloaders import IEXDataset, CurrencyData, collate_batch_fn
-from models import EncoderDecoderLSTM
+logger = logging.getLogger(__name__)
 
 
-def now_str():
-    return datetime.now().strftime('%b-%d-%H-%M-%S')
+def collate_batch_fn(batch):
+    xs = [i[0] for i in batch]
+    ys = [i[1] for i in batch]
+    return tuple([torch.stack(xs), torch.stack(ys)])
 
 
-def today_str():
-    return datetime.now().strftime('%Y-%b-%d')
+def check_date_overlap(t_range, v_range):
+    t_start, t_end = t_range
+    v_start, v_end = v_range
 
-
-logger = None
-def make_logger(file_path:str):
-    global logger
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(filename=file_path,
-                        filemode='w',
-                        level=logging.DEBUG,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
+    start, end = max(t_start, v_start), min(t_end, v_end)
+    delta = (end - start).total_seconds() + 1
+    if delta > 0:
+        raise ValueError("There's an overlap in training and validation dataset")
 
 
 class SequencePredictorTrainer():
-    def __init__(self, config, cl_args):
-        super(SequencePredictorTrainer, self).__init__()
-        for cfg, val in config.items():
+    """Train 1D sequences."""
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        for cfg, val in kwargs.items():
             setattr(self, '_' + cfg, val)
 
-        self._chckpt_dir = os.path.join(self._chckpt_dir, now_str())
-        pathlib.Path(self._chckpt_dir).mkdir(parents=True, exist_ok=True)
+        self._name = self._train_dataset.name
 
-        make_logger(os.path.join(self._chckpt_dir, 'trainer.log'))
+        if hasattr(self._train_dataset, 'date_range'):
+            check_date_overlap(self._train_dataset.date_range, self._valdn_dataset.date_range)
 
-        with open(os.path.join(self._chckpt_dir, 'config.json'), 'w') as out_config:
-            json.dump({"config": config}, out_config, indent=2)
+        self._train_dataloader = dataloader.DataLoader(self._train_dataset,
+                                                       batch_size=self._batch_size,
+                                                       drop_last=True,
+                                                       shuffle=True,
+                                                       collate_fn=collate_batch_fn)
 
-        dataset_args = config['dataset_config']
-        model_args = config['model_config']
-        assert ('country' in config) != ('ticker' in config)
-        if 'country' in config:
-            model_args['ip_n_feat'] = 1
-            model_args['op_n_feat'] = 1
-            dataset_class = CurrencyData
-            dataset_args['country'] = self._country.upper()
-            model_args['batch_n'] = self._batch_size
-            self._name = self._country
-        elif 'ticker' in config:
-            assert 'input_features' in dataset_args and 'output_features' in dataset_args
-            model_args['ip_n_feat'] = len(dataset_args['input_features'])
-            model_args['op_n_feat'] = len(dataset_args['output_features'])
-            model_args['batch_n'] = self._batch_size
-            dataset_args['ticker'] = self._ticker
-            dataset_class = IEXDataset
-            self._name = self._ticker
-        else:
-            raise ValueError('model_config must have either "ticker" or "country"')
+        self._valdn_dataloader = dataloader.DataLoader(self._valdn_dataset,
+                                                       batch_size=self._batch_size,
+                                                       drop_last=True,
+                                                       collate_fn=collate_batch_fn)
 
-        self._num_predictions = dataset_args['output_seq_len']
-
-        self._model = EncoderDecoderLSTM(**model_args)
-
-        self._optim = torch.optim.Adadelta(**config["optimizer_config"], params=self._model.parameters())
-
-        self._lr_sched = torch.optim.lr_scheduler.StepLR(**config["lr_sched_config"], optimizer=self._optim)
-        self._writer = SummaryWriter(self._chckpt_dir)
-
-        # used in plotting
-        self._output_features = dataset_args['output_features']
-
-        train_dataset = dataset_class(cl_args, **dataset_args,
-                                      num_days_to_fetch=self._num_train_days,
-                                      num_days_to_skip=self._num_valdn_days)
-
-        self._train_data = dataloader.DataLoader(train_dataset,
-                                                 batch_size=self._batch_size,
-                                                 drop_last=True,
-                                                 shuffle=True,
-                                                 collate_fn=collate_batch_fn)
-
-        valdn_dataset = dataset_class(cl_args, **dataset_args,
-                                      num_days_to_skip=0,
-                                      num_days_to_fetch=self._num_valdn_days)
-
-        self._valdn_data = dataloader.DataLoader(valdn_dataset,
-                                                 batch_size=self._batch_size,
-                                                 drop_last=True,
-                                                 collate_fn=collate_batch_fn)
-        logger.info(f'Training with  {len(self._train_data)} batches')
-        logger.info(f'Validating with {len(self._valdn_data)} batches')
-
-        loss_reduction = config['loss_reduction'] if 'loss_reduction' in config else 'mean'
-        self._loss = nn.L1Loss(reduction=loss_reduction)
-
+        self._writer = SummaryWriter(self._logging_dir)
+        self._valdn_data_scale_fn = self._valdn_dataset.scale
         self._it = self.epoch = 0
-
-        self._valdn_data_scale_fn = valdn_dataset.scale
 
     def train(self):
 
@@ -120,17 +64,17 @@ class SequencePredictorTrainer():
         is_best = False
 
         def _train_one_sample(x, y):
-            model_ip = (x, self._num_predictions)
+            model_ip = (x, self._output_seq_len)
             y_hat = self._model(model_ip)
             loss = self._loss(y_hat, y)
 
-            self._optim.zero_grad()
+            self._optimizer.zero_grad()
             loss.backward()
 
-            self._optim.step()
-            self._lr_sched.step()
+            self._optimizer.step()
+            self._lr_scheduler.step()
 
-            loss_list.append(loss)
+            loss_list.append(loss.item())
             self._it += 1
 
         @torch.no_grad()
@@ -138,7 +82,7 @@ class SequencePredictorTrainer():
             mean_loss = torch.Tensor(loss_list).mean()
             self._writer.add_scalars('Loss', {'Train': mean_loss}, self._it)
 
-            lr = self._optim.param_groups[0]['lr']
+            lr = self._optimizer.param_groups[0]['lr']
             self._writer.add_scalar('Optim/LR', lr, self._it)
             for n, p in self._model.named_parameters():
                 self._writer.add_histogram(n + '_grads', p.grad, self._it)
@@ -148,7 +92,7 @@ class SequencePredictorTrainer():
         for self.epoch in range(1, self._num_epochs + 1):
             loss_list = []
             self._model.train()
-            for sample in iter(self._train_data):
+            for sample in iter(self._train_dataloader):
 
                 _train_one_sample(*sample)
 
@@ -176,8 +120,8 @@ class SequencePredictorTrainer():
     def run_validation(self, show_plot=False, save_plot=False):
         loss_list, pred_list, tgt_list = [], [], []
         self._model.eval()
-        for (x, y) in iter(self._valdn_data):
-            model_ip = (x, self._num_predictions)
+        for (x, y) in iter(self._valdn_dataloader):
+            model_ip = (x, self._output_seq_len)
             y_hat = self._model(model_ip)
             loss = self._loss(y_hat, y)
             loss_list.append(loss)
@@ -194,11 +138,11 @@ class SequencePredictorTrainer():
         suffix = self._name + '-EP_' + str(self.epoch)
         if is_best:
             suffix += '_better'
-        filename = os.path.join(self._chckpt_dir,  suffix + '.pt')
-        torch.save({'model' : self._model,
+        filename = os.path.join(self._logging_dir,  suffix + '.pt')
+        torch.save({'model': self._model,
                     'epoch': self.epoch,
-                    'optim': self._optim.state_dict(),
-                    'lr_sched': self._lr_sched.state_dict()}, filename)
+                    'optim': self._optimizer.state_dict(),
+                    'lr_sched': self._lr_scheduler.state_dict()}, filename)
 
     @torch.no_grad()
     def resume_checkpoint(self, filename):
@@ -211,8 +155,8 @@ class SequencePredictorTrainer():
         checkpoint = torch.load(filename)
 
         self._model.load_state_dict(checkpoint['model'])
-        self._optim.load_state_dict(checkpoint['optim'])
-        self._lr_sched.load_state_dict(checkpoint['lr_sched'])
+        self._optimizer.load_state_dict(checkpoint['optim'])
+        self._lr_scheduler.load_state_dict(checkpoint['lr_sched'])
 
     @torch.no_grad()
     def _plot_valdn(self, pred_slid_win, tgt_slid_win, show=False, save=False):
@@ -245,7 +189,7 @@ class SequencePredictorTrainer():
                 logger.info('Actual:   ' + str([f'{x:.3f} ' for x in tgt_list]))
                 logger.info('Predicted:' + str([f'{x:1.3f} ' for x in pred_list]))
             if save:
-                save_path = os.path.join(self._chckpt_dir, title + '-EP_' + str(self.epoch) + '.png')
+                save_path = os.path.join(self._logging_dir, title + '-EP_' + str(self.epoch) + '.png')
                 plt.savefig(save_path, dpi=100)
                 save_paths.append(save_path)
                 logger.debug(f'Plot image saved to {save_path}')
