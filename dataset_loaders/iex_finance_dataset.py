@@ -21,10 +21,10 @@ class IEXDataset:
 
     ALL_FEATURES = ["high", "low", "open", "close", "average", "volume", "numberOfTrades"]
 
-    def __init__(self, data_dir: str, ticker: str,
-                 num_samples: int, skip_past: int, frequency: str,
+    def __init__(self, data_dir: str, ticker: str, batch_size: int,
+                 num_batches: int, skip_past: int, frequency: str,
                  input_features: List[str], output_features: List[str],
-                 input_seq_len: int, output_seq_len: int):
+                 input_seq_len: int, output_seq_len: int, overlap:bool):
         super().__init__()
 
         if 'IEX_Token' in os.environ:
@@ -44,8 +44,8 @@ class IEXDataset:
         self.ticker_dir = pathlib.Path(f'{self._data_dir}/{ticker.upper()}')
         self.ticker_dir.mkdir(parents=True, exist_ok=True)
 
-        input_features = [v.strip().lower() for v in input_features]
-        output_features = [v.strip().lower() for v in output_features]
+        input_features = [v.strip() for v in input_features]
+        output_features = [v.strip() for v in output_features]
 
         assert skip_past >= 0, "Data fetching cannot begin from future"
         bad_features = [f for f in input_features if f not in IEXDataset.ALL_FEATURES]
@@ -53,9 +53,14 @@ class IEXDataset:
         bad_features = [f for f in output_features if f not in IEXDataset.ALL_FEATURES]
         assert not bad_features, f"Some unrecognized output features requested: {bad_features}."
 
-        data = self._get_intra_day(ticker, frequency=frequency, num_days_to_skip=skip_past, num_samples=num_samples)
+        if overlap:
+            num_samples = num_batches * batch_size + input_seq_len + output_seq_len - 1
+        else:
+            num_samples = (num_batches * batch_size) * (input_seq_len + output_seq_len)
+        data = self._get_intra_day(ticker, frequency=frequency,
+                                   num_days_to_skip=skip_past, num_samples=num_samples)
 
-        self.date_range = (min(data.index[0], data.index[-1]), max(data.index[0], data.index[-1]))
+        self.date_range = (data.index[0], data.index[-1])
 
         logger.info(f'Datset fetched {len(data)} rows, spanning {self.date_range[0]} to {self.date_range[1]}')
         self._in_data = data[input_features].to_numpy().astype(np.float32)
@@ -70,10 +75,18 @@ class IEXDataset:
         self._input_seq_len = input_seq_len
         self._output_seq_len = output_seq_len
 
+        self._overlap = overlap
+
     def __len__(self):
-        return self._in_data.shape[0] - (self._input_seq_len + self._output_seq_len)
+        sample_len = self._input_seq_len + self._output_seq_len
+        data_len = self._in_data.shape[0]
+        if self._overlap:
+            return data_len - sample_len + 1
+        return int(data_len / sample_len)
 
     def __getitem__(self, index):
+        if not self._overlap:
+            index = index * (self._input_seq_len + self._output_seq_len)
         end_1 = index + self._input_seq_len
         end_2 = end_1 + self._output_seq_len
         ip, op = self._in_data[index:end_1], self._out_data[index:end_2]
@@ -93,7 +106,7 @@ class IEXDataset:
 
         try:
             url1 = f'https://cloud.iexapis.com/stable/stock/{ticker}/chart/date/'
-            url2 = f'{date_str}?format=csv&token={self._IEX_TOKEN}'
+            url2 = f'{date_str}?format=csv&token={self._IEX_TOKEN}&chartIEXOnly=true'
             url = url1 + url2
             r = requests.get(url, verify=False)
         except urllib.error.HTTPError as err:
@@ -120,8 +133,8 @@ class IEXDataset:
             frame, reason = self._get_from_IEX(date, ticker)
             if frame is None:
                 return frame, reason
-            
-            frame.to_csv(file_path, index=False)  # how about .to_parquet
+            if date.date() != datetime.today().date():
+                frame.to_csv(file_path, index=False)  # how about .to_parquet
 
         frame['datetime'] = pd.to_datetime(frame['datetime'], format='%Y-%m-%d-%H:%M')
         return frame, "ok"
@@ -161,4 +174,6 @@ class IEXDataset:
                 frames.append(frame)
 
         ret_frame = pd.concat(frames[num_days_to_skip:])
+        ret_frame = ret_frame.sort_values('datetime', ascending=True)
+        ret_frame = ret_frame[-num_samples:]
         return ret_frame

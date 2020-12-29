@@ -1,13 +1,8 @@
-import json
 import logging
 import os
-import pathlib
-from datetime import datetime, timedelta
 
 import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.data.dataloader as dataloader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -32,40 +27,23 @@ class SequencePredictorTrainer():
 
         self._train_dataloader = dataloader.DataLoader(train_dataset,
                                                        batch_size=self._batch_size,
-                                                       drop_last=True,
                                                        shuffle=True,
                                                        collate_fn=collate_batch_fn)
 
-        self._valdn_dataloader = dataloader.DataLoader(valdn_dataset,
-                                                       batch_size=self._batch_size,
-                                                       drop_last=True,
-                                                       collate_fn=collate_batch_fn)
+        self._valdn_dataloader = dataloader.DataLoader(valdn_dataset, batch_size=3)
 
-        logger.info(f'Training on {len(self._train_dataloader)} batches, and validating on \
-                     {len(self._valdn_dataloader)} batches')
+        logger.info(f'Training on {len(self._train_dataloader)} batches, and validating on '
+                    f'{len(self._valdn_dataloader)} sequences')
 
-        self._writer = SummaryWriter(self._logging_dir)
-        self._valdn_data_scale_fn = valdn_dataset.scale
+        self._writer = SummaryWriter(self._logging_dir) if self._log_tensorboard else None
+
+        self._valdn_scale_fn = valdn_dataset.scale
         self._it = self.epoch = 0
 
     def train(self):
 
-        best_valdn_loss = float('inf')
-        is_best = False
-
-        def _train_one_sample(x, y):
-            model_ip = (x, self._output_seq_len)
-            y_hat = self._model(model_ip)
-            loss = self._loss(y_hat, y)
-
-            self._optimizer.zero_grad()
-            loss.backward()
-
-            self._optimizer.step()
-            self._lr_scheduler.step()
-
-            loss_list.append(loss.item())
-            self._it += 1
+        best_valdn_loss, best_epoch = float('inf'), -1
+        is_better = False
 
         @torch.no_grad()
         def _log_to_tb():
@@ -82,32 +60,45 @@ class SequencePredictorTrainer():
         for self.epoch in range(1, self._num_epochs + 1):
             loss_list = []
             self._model.train()
-            for sample in iter(self._train_dataloader):
+            for x, y in iter(self._train_dataloader):
 
-                _train_one_sample(*sample)
+                model_ip = (x, self._output_seq_len)
+                y_hat = self._model(model_ip)
+                loss = self._loss(y_hat, y)
 
-                if self._it % self._log_n_iter == 0:
+                self._optimizer.zero_grad()
+                loss.backward()
+
+                self._optimizer.step()
+                self._lr_scheduler.step()
+
+                loss_list.append(loss.item())
+                self._it += 1
+
+                if self._log_tensorboard and self._it % self._log_n_iter == 0:
                     _log_to_tb()
 
             mean_loss = torch.Tensor(loss_list).mean()
             logger.info(f'Epoch: {self.epoch:03} Training Avg-loss: {mean_loss:2.3}')
 
             if self.epoch % self._valdn_n_epochs == 0 and self.epoch > 0:
+
                 valdn_loss, _ = self.run_validation(show_plot=False, save_plot=True)
-                is_best = valdn_loss.item() < best_valdn_loss
-                if is_best:
-                    best_valdn_loss = valdn_loss
-                logger.info(f'Epoch: {self.epoch:03} --> Validation Avg-loss: {valdn_loss:2.3}' +
-                            (' <--' if is_best else ', Best: ' + str(best_valdn_loss.item())))
+                is_better = valdn_loss.item() < best_valdn_loss
+
+                if is_better:
+                    best_valdn_loss, best_epoch = valdn_loss, self.epoch
+                best_str = '<--' if is_better else f', Best: {best_valdn_loss.item():2.4} @ Epoch {best_epoch}'
+                logger.info(f'Epoch: {self.epoch:03} --> Validation Avg-loss: {valdn_loss:2.3} {best_str}')
 
             if self.epoch % (self._checkpt_n_valdn * self._valdn_n_epochs) == 0:
-                self.save_checkpoint(is_best=is_best)
+                self.save_checkpoint(is_better=is_better)
 
         self.run_validation(True, True)
-        self.save_checkpoint(is_best=is_best)
+        self.save_checkpoint(is_better=is_better)
 
     @torch.no_grad()
-    def run_validation(self, show_plot=False, save_plot=False):
+    def run_validation(self, show_plot, save_plot):
         loss_list, pred_list, tgt_list = [], [], []
         self._model.eval()
         for (x, y) in iter(self._valdn_dataloader):
@@ -118,21 +109,29 @@ class SequencePredictorTrainer():
             pred_list.append(y_hat)
             tgt_list.append(y)
         mean_loss = torch.Tensor(loss_list).mean()
-        self._writer.add_scalars('Loss', {'Validation': mean_loss}, self._it)
+        if self._log_tensorboard:
+            self._writer.add_scalars('Loss', {'Validation': mean_loss}, self._it)
 
-        save_paths = self._plot_valdn(pred_list, tgt_list, show=show_plot, save=save_plot)
-        return mean_loss, save_paths
+        self._plot_valdn(pred_list, tgt_list, show=show_plot, save=save_plot)
+        self._model.train()
+        return mean_loss, []
 
     @torch.no_grad()
-    def save_checkpoint(self, is_best=False):
+    def save_checkpoint(self, is_better=False):
         suffix = self._name + '-EP_' + str(self.epoch)
-        if is_best:
-            suffix += '_better'
         filename = os.path.join(self._logging_dir,  suffix + '.pt')
         torch.save({'model': self._model,
                     'epoch': self.epoch,
                     'optim': self._optimizer.state_dict(),
                     'lr_sched': self._lr_scheduler.state_dict()}, filename)
+        if is_better:
+            filename = os.path.join(self._logging_dir, self._name.upper() +'_best.pt')
+            torch.save({'model': self._model,
+                        'epoch': self.epoch,
+                        'optim': self._optimizer.state_dict(),
+                        'lr_sched': self._lr_scheduler.state_dict()}, filename)
+                        
+                        
 
     @torch.no_grad()
     def resume_checkpoint(self, filename):
@@ -149,39 +148,34 @@ class SequencePredictorTrainer():
         self._lr_scheduler.load_state_dict(checkpoint['lr_sched'])
 
     @torch.no_grad()
-    def _plot_valdn(self, pred_slid_win, tgt_slid_win, show=False, save=False):
-
-        save_paths = []
-
+    def _plot_valdn(self, pred, tgt, show, save):
+        purple = (.60, .45, .90)
+        orange = (.90, .40, .15)
+        green = (.28, .90, .15)
         if not show and not save:
-            return save_paths
+            return
+        in_n, out_n = self._input_seq_len, self._output_seq_len
+        _, tgt = self._valdn_scale_fn(None, torch.cat(tgt))
+        _, pred= self._valdn_scale_fn(None, torch.cat(pred))
 
-        def _sliding_win_to_seq(windows: list, component: int):
-            windows = [torch.squeeze(w[:, :, component]) for w in windows]
-            windows = torch.cat(windows, dim=0)
-            ret = windows
-            if windows.dim() == 2:
-                ret = list(windows[0]) + list(windows[1:, 1])
-            return torch.tensor([r.item() for r in ret])
-
-        for idx, op_feat in enumerate(self._output_features):
-            tgt_list = _sliding_win_to_seq(tgt_slid_win, idx)
-            pred_list = _sliding_win_to_seq(pred_slid_win, idx)
-            _, pred_list = self._valdn_data_scale_fn(None, pred_list)
-            _, tgt_list = self._valdn_data_scale_fn(None, tgt_list)
-            plt.plot(pred_list, label='Predicted')
-            plt.plot(tgt_list, label='Actual')
-            title = self._name.upper() + '-' + op_feat.capitalize()
+        tgt = tgt.reshape(-1, tgt.shape[-1])
+        x = 0
+        for i, op_feat in enumerate(self._output_features):
+            plt.plot(tgt[..., i], label='Actual', linewidth=0.5, color=purple, linestyle='dotted')
+            title = self._name.upper() + '_' + op_feat.capitalize()
+            for i, seg in enumerate(pred):
+                plt.plot(range(x, x + in_n), seg[0:in_n], color=orange, linewidth=.5)
+                x += in_n
+                plt.plot(range(x, x + out_n), seg[in_n:], color=green, linewidth=.5)
+                x += out_n
+            plt.plot([], [], color=orange, linewidth=.5, label='Predicted@Input')
+            plt.plot([], [], color=green, linewidth=.5, label='Predicted@Output')
             plt.title(title)
             plt.legend()
-            if show:
-                plt.show()
-                logger.info('Actual:   ' + str([f'{x:.3f} ' for x in tgt_list]))
-                logger.info('Predicted:' + str([f'{x:1.3f} ' for x in pred_list]))
             if save:
                 save_path = os.path.join(self._logging_dir, title + '-EP_' + str(self.epoch) + '.png')
-                plt.savefig(save_path, dpi=100)
-                save_paths.append(save_path)
+                plt.savefig(save_path, dpi=200)
                 logger.debug(f'Plot image saved to {save_path}')
+            if show:
+                plt.show()
             plt.clf()
-        return save_paths

@@ -1,23 +1,32 @@
+from  typing import List
 import logging
 
 import torch
 import torch.nn as nn
 
+from misc.reflections import make_class_from_module
+
 logger = logging.getLogger(__name__)
 
 
 class EncoderDecoderLSTM(nn.Module):
-    def __init__(self, input_n_features: int, recurrent_ip_size: int,
-                 rnn_hidden_size: int, output_n_features: int, **kwargs):
+    def __init__(self, input_n_features: int,
+                 recurrent_ip_size: int, recurrent_hidden_size: int,
+                 output_n_features: int, perturb_init:bool, **kwargs):
         super().__init__()
 
-        self._encoder = nn.Linear(input_n_features, recurrent_ip_size)
+        self._encoder = self._make_seq_linear(input_n_features, kwargs.get('encoder_sizes', []),
+                                              recurrent_ip_size)
 
-        self._recurrent = nn.LSTMCell(recurrent_ip_size, rnn_hidden_size)
+        self._recurrent = nn.LSTMCell(recurrent_ip_size, recurrent_hidden_size)
 
-        self._decoder = nn.Linear(rnn_hidden_size, output_n_features)
+        self._decoder = self._make_seq_linear(recurrent_hidden_size, kwargs.get('decoder_sizes', []),
+                                              output_n_features)
 
-        self._rnn_hidden_size = rnn_hidden_size
+        self._rnn_hidden_size = recurrent_hidden_size
+
+        self._perturb_init = perturb_init
+
         self.log()
 
     def log(self):
@@ -30,28 +39,21 @@ class EncoderDecoderLSTM(nn.Module):
                     f'decoder {dec_ct}, recurrent: {rec_ct}')
         logger.debug(self)
 
-    def _make_seq_linear(self, input_sz, layers_sizes, output_sz, dropout):
+    def _make_seq_linear(self, in_size, stack_sizes, out_size):
 
-        if len(layers_sizes) == 0:
-            return
+        stack_sizes = [in_size] + stack_sizes + [out_size]
 
-        block = [nn.Linear(input_sz, layers_sizes[0]), nn.ReLU()]
+        block = []
+        for i in range(0, len(stack_sizes)-1):
+            block += [nn.Linear(stack_sizes[i], stack_sizes[i+1])]
 
-        for sz in layers_sizes:
-            block += [nn.Linear(block[-2].out_features, sz), nn.ReLU()]
-        last_in_block = block[-2]
-
-        if dropout > 0.0:
-            block.append(nn.Dropout(.25))
-
-        block += [nn.Linear(last_in_block.out_features, output_sz), nn.ReLU()]
         return nn.Sequential(*block)
 
     def forward(self, x):
         input_seq, future_n = x
         batch_n, past_n, *_ = input_seq.shape
 
-        if self.training:
+        if self.training and self._perturb_init:
             state = (torch.randn(batch_n, self._rnn_hidden_size)/15,
                      torch.randn(batch_n, self._rnn_hidden_size)/15)
         else:
@@ -61,10 +63,12 @@ class EncoderDecoderLSTM(nn.Module):
         encoded = self._encoder(input_seq)
         rec_op = []
         for t in range(past_n):
-            rec_op.append(self._recurrent(encoded[:, t, :], state)[0])
+            state = self._recurrent(encoded[:, t, :], state)
+            rec_op.append(state[0])
 
         for _ in range(future_n):
-            rec_op.append(self._recurrent(encoded[:, -1, :], state)[0])
+            state = self._recurrent(encoded[:, -1, :], state)
+            rec_op.append(state[0])
 
         output = self._decoder(torch.stack(rec_op, 1))
         return output

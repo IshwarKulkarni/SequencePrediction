@@ -8,54 +8,54 @@
             "valdn_n_epochs": 10,
             "checkpt_n_valdn": 1,
             "log_n_iter": 250,
-            "batch_size": 16,
             "loss_reduction": "mean",
-            "num_dataloder_workers" : 0
+            "num_dataloder_workers": 0,
+            "log_tensorboard": true
         }
     },
-
     "model": {
         "name": "models.encoder_decoder_lstm.EncoderDecoderLSTM",
         "args": {
+            "encoder_sizes": [64, 64],
             "recurrent_ip_size": 8,
-            "num_layers": 1,
-            "rnn_hidden_size": 128
+            "decoder_sizes": [32, 64],
+            "recurrent_hidden_size": 128,
+            "perturb_init": true
         }
     },
-
     "dataset_common": {
         "args": {
-            "input_features": ["average", "high", "low", "close"],
-            "output_features": ["close"],
-            "output_seq_len": 15,
-            "input_seq_len": 3,
+            "batch_size": 10,
+            "input_features": ["average", "high", "low"],
+            "output_features": ["average"],
+            "input_seq_len": 2,
+            "output_seq_len": 5,
             "data_dir": "data/ticker_data",
-            "frequency": "60Min"
+            "frequency": "5Min",
+            "ticker": "nvda"
         }
     },
 
     "train_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "ticker": "msft",
-            "num_samples": 500,
-            "skip_past": 10
+            "num_batches": 500,
+            "skip_past": 25,
+            "overlap" : true
         }
     },
-
     "valdn_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "ticker": "msft",
-            "num_samples": 50,
-            "skip_past": 1
+            "num_batches": 12,
+            "skip_past": 0,
+            "overlap" : false
         }
     },
-
-    "loss" : {
-        "name" : "torch.nn.MSELoss",
-        "args" : {
-            "reduction" : "mean"
+    "loss": {
+        "name": "torch.nn.MSELoss",
+        "args": {
+            "reduction": "mean"
         }
     },
 

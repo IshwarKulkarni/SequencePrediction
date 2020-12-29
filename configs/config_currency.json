@@ -10,7 +10,8 @@
             "log_n_iter": 250,
             "batch_size": 16,
             "loss_reduction": "mean",
-            "num_dataloder_workers" : 0
+            "num_dataloder_workers" : 0,
+            "log_tensorboard" : false
         }
     },
 
@@ -19,7 +20,8 @@
         "args": {
             "recurrent_ip_size": 8,
             "num_layers": 1,
-            "rnn_hidden_size": 128
+            "rnn_hidden_size": 128,
+            "perturb_init" : true
         }
     },
 

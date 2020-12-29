@@ -1,11 +1,11 @@
 import argparse
-import importlib
 import json
 import logging
 import os
 import pathlib
-import sys
 from datetime import datetime
+
+from misc.reflections import make_class_from_module
 
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
@@ -35,21 +35,18 @@ class Config:
         return self.config
 
     def make_module(self, config_module, other_args=None):
-        """Make a module in the format we have in config."""
+        """Make a module in the format we have in config, if not return None."""
+        if config_module not in self.config:
+            return None
+
         full_class_name = self.config[config_module]['name']
 
-        assert '.' in full_class_name, 'Passed int class name is not fully qualified'
-        names = full_class_name.split('.')
-        class_name = names[-1]
-        module_name = '.'.join(names[0:-1])
-
-        module = importlib.import_module(module_name)
-        class_obj = getattr(module, class_name)
+        class_type = make_class_from_module(full_class_name)
 
         args = self.config[config_module]['args']
         if other_args:
             args.update(other_args)
-        return class_obj(**args)
+        return class_type(**args)
 
     def log_self(self):
         with open(os.path.join(self.config['logging_dir'], 'config.json'), 'w') as file_:
