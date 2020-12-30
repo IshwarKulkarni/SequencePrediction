@@ -2,6 +2,7 @@ import logging
 import os
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.utils.data.dataloader as dataloader
 from torch.utils.tensorboard import SummaryWriter
@@ -125,13 +126,11 @@ class SequencePredictorTrainer():
                     'optim': self._optimizer.state_dict(),
                     'lr_sched': self._lr_scheduler.state_dict()}, filename)
         if is_better:
-            filename = os.path.join(self._logging_dir, self._name.upper() +'_best.pt')
+            filename = os.path.join(self._logging_dir, self._name.upper() + '_best.pt')
             torch.save({'model': self._model,
                         'epoch': self.epoch,
                         'optim': self._optimizer.state_dict(),
                         'lr_sched': self._lr_scheduler.state_dict()}, filename)
-                        
-                        
 
     @torch.no_grad()
     def resume_checkpoint(self, filename):
@@ -149,6 +148,7 @@ class SequencePredictorTrainer():
 
     @torch.no_grad()
     def _plot_valdn(self, pred, tgt, show, save):
+        pink = (.90, .45, .40)
         purple = (.60, .45, .90)
         orange = (.90, .40, .15)
         green = (.28, .90, .15)
@@ -156,7 +156,7 @@ class SequencePredictorTrainer():
             return
         in_n, out_n = self._input_seq_len, self._output_seq_len
         _, tgt = self._valdn_scale_fn(None, torch.cat(tgt))
-        _, pred= self._valdn_scale_fn(None, torch.cat(pred))
+        _, pred = self._valdn_scale_fn(None, torch.cat(pred))
 
         tgt = tgt.reshape(-1, tgt.shape[-1])
         x = 0
