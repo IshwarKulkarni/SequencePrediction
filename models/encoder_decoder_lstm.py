@@ -15,36 +15,42 @@ class EncoderDecoderLSTM(nn.Module):
                  output_n_features: int, perturb_init: bool, **kwargs):
         super().__init__()
 
-        self._encoder = self._make_seq_linear(input_n_features, kwargs.get('encoder_sizes', []),
-                                              recurrent_ip_size)
+        self._encoder = self._make_seq_linear(input_n_features, recurrent_ip_size,
+                                              kwargs.get('encoder_sizes', []))
 
-        self._fut_encoder = self._make_seq_linear(recurrent_hidden_size, kwargs.get('future_enc_sizes', []),
-                                                  recurrent_ip_size)
+        self.split_recurrent = kwargs.get('split_recurrent', False)
 
         self._past_rec = nn.LSTMCell(recurrent_ip_size, recurrent_hidden_size)
-        self._future_rec = nn.LSTMCell(recurrent_ip_size, recurrent_hidden_size)
+        self._future_rec = self._past_rec
+        if self.split_recurrent:
+            self._future_rec = nn.LSTMCell(recurrent_ip_size, recurrent_hidden_size)
 
+        self._fut_encoder = self._make_seq_linear(recurrent_hidden_size, recurrent_ip_size,
+                                                      kwargs.get('future_enc_sizes', []))
         self._encoder_activation = nn.Tanh()
 
-        self._decoder = self._make_seq_linear(recurrent_hidden_size, kwargs.get('decoder_sizes', []),
-                                              output_n_features)
+        self._decoder = self._make_seq_linear(recurrent_hidden_size, output_n_features,
+                                              kwargs.get('decoder_sizes', []))
 
         self._rnn_hidden_size = recurrent_hidden_size
 
         self._perturb_init = perturb_init
         self._perturb_std = 1.0/15
 
-        self.log()
+        self._log()
 
-    def log(self):
+    def _log(self):
         k_v = [(k, sum(p.numel() for p in v.parameters())) for k, v in self._modules.items()]
-        log_str = f'Model initialized with {sum([v for k, v in k_v])} parameters'
+        total, log_str = 0, ''
         for k, v in k_v:
-            log_str += (', ' + k + ' ' + str(v))
-        logger.info(log_str)
+            if v > 0 and not (self.split_recurrent or k == '_future_rec'):
+                log_str += (', ' + k + ' ' + str(v))
+                total += v
+
+        logger.info(f'Model initialized with {total} parameters' + log_str)
         logger.debug(self)
 
-    def _make_seq_linear(self, in_size, stack_sizes, out_size):
+    def _make_seq_linear(self, in_size, out_size, stack_sizes):
 
         stack_sizes = [in_size] + stack_sizes + [out_size]
 
@@ -59,8 +65,8 @@ class EncoderDecoderLSTM(nn.Module):
         batch_n, past_n, *_ = input_seq.shape
 
         if self.training and self._perturb_init:
-            state = (torch.randn(batch_n, self._rnn_hidden_size)/self._perturb_std,
-                     torch.randn(batch_n, self._rnn_hidden_size)/self._perturb_std)
+            state = (torch.randn(batch_n, self._rnn_hidden_size) * self._perturb_std,
+                     torch.randn(batch_n, self._rnn_hidden_size) * self._perturb_std)
         else:
             state = (torch.zeros(batch_n, self._rnn_hidden_size),
                      torch.zeros(batch_n, self._rnn_hidden_size))

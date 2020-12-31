@@ -16,18 +16,19 @@
     "model": {
         "name": "models.encoder_decoder_lstm.EncoderDecoderLSTM",
         "args": {
-            "encoder_sizes": [64, 64],
+            "encoder_sizes": [],
             "recurrent_ip_size": 8,
-            "decoder_sizes": [32, 64],
-            "future_enc_sizes": [32, 64],
-            "recurrent_hidden_size": 128,
-            "perturb_init": true
+            "decoder_sizes": [],
+            "future_enc_sizes": [],
+            "recurrent_hidden_size": 64,
+            "perturb_init": true,
+            "split_recurrent": false
         }
     },
     "dataset_common": {
         "args": {
             "batch_size": 16,
-            "input_features": ["average", "high", "low"],
+            "input_features": ["average"],
             "output_features": ["average"],
             "input_seq_len": 2,
             "output_seq_len": 3,
@@ -48,7 +49,7 @@
     "valdn_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "num_batches": 24,
+            "num_batches": 2,
             "skip_past": 0,
             "overlap" : false
         }

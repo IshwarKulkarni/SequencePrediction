@@ -19,10 +19,22 @@ class Config:
         parser.add_argument('--config_file', type=str, help='Path of the configuration file for trainer.')
         parser.add_argument('--IEX_token', type=str, help='IEX authentication token')
 
-        args = parser.parse_args()
+        args, extra_args = parser.parse_known_args()
 
         with open(args.config_file) as config_file:
             self.config = json.load(config_file)
+
+        try:
+            for arg in extra_args:
+                assert '=' in arg, 'need key=value type args'
+                keys, value = arg.split('=')
+                keys = keys.split('.')
+                module = self.config
+                for k in keys[:-1]:
+                    module = module[k]
+                module[keys[-1]] = type(module[keys[-1]])(value)
+        except KeyError as key_err:
+            logging.warn('Only existing keys can be replaced with additional args, ignoring: ' + str(key_err))
 
         if args.IEX_token is not None:
             os.environ['IEX_TOKEN'] = args.IEX_token
@@ -110,7 +122,11 @@ def main():
                                              'logging_dir': config['logging_dir'],
                                              **dataset_common})
 
-    trainer.train()
+    try:
+        trainer.train()
+    except KeyboardInterrupt:
+        logging.debug('Keyboard interrupt detected, stoppingg training and exiting.')
+        trainer.run_validation(True, True)
 
 if __name__ == '__main__':
     main()
