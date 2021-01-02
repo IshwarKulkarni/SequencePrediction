@@ -16,13 +16,14 @@
     "model": {
         "name": "models.encoder_decoder_lstm.EncoderDecoderLSTM",
         "args": {
-            "encoder_sizes": [],
-            "recurrent_ip_size": 8,
-            "decoder_sizes": [],
-            "future_enc_sizes": [],
-            "recurrent_hidden_size": 64,
-            "perturb_init": true,
-            "split_recurrent": false
+            "rec_hidden_size": 128,
+            "encoder_sizes": [64, 64],
+            "rec_ip_size": 8,
+            "num_layers" : 2,
+            "decoder_sizes": [32, 64],
+            "future_enc_sizes": [32, 64],
+            "separate_future_lstm": true,
+            "perturb_init": true
         }
     },
     "dataset_common": {
@@ -31,7 +32,7 @@
             "input_features": ["average"],
             "output_features": ["average"],
             "input_seq_len": 2,
-            "output_seq_len": 3,
+            "output_seq_len": 2,
             "data_dir": "data/ticker_data",
             "frequency": "3Min",
             "ticker": "nvda"
@@ -41,8 +42,8 @@
     "train_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "num_batches": 800,
-            "skip_past": 25,
+            "num_batches": 500,
+            "skip_past": 3,
             "overlap" : true
         }
     },

@@ -62,7 +62,9 @@ class IEXDataset:
 
         self.date_range = (data.index[0], data.index[-1])
 
-        logger.info(f'Datset fetched {len(data)} rows, spanning {self.date_range[0]} to {self.date_range[1]}')
+        n_days = (data.index[-1] - data.index[0]).days
+        logger.info(f'Datset fetched {len(data)} rows, spanning {n_days} days from'
+                    f' {self.date_range[0]}  to {self.date_range[1]}')
         self._in_data = data[input_features].to_numpy().astype(np.float32)
         self._out_data = data[output_features].to_numpy().astype(np.float32)
 
