@@ -68,8 +68,8 @@ class IEXDataset:
         self._in_data = data[input_features].to_numpy().astype(np.float32)
         self._out_data = data[output_features].to_numpy().astype(np.float32)
 
-        self._input_scale = self._in_data.mean(0)
-        self._output_scale = self._out_data.mean(0)
+        self._input_scale = self._in_data.mean(0) / 25
+        self._output_scale = self._out_data.mean(0) / 25
 
         self._in_data /= self._input_scale
         self._out_data /= self._output_scale

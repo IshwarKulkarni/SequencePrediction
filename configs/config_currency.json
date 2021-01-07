@@ -16,7 +16,7 @@
     },
 
     "model": {
-        "name": "models.encoder_decoder_lstm.EncoderDecoderLSTM",
+        "name": "models.encoder_decoder_lstm.EncoderDecoderRecurrent",
         "args": {
             "recurrent_ip_size": 8,
             "num_layers": 1,

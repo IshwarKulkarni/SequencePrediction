@@ -87,6 +87,14 @@ def check_date_overlap(t_range, v_range):
     if delta > 0:
         raise ValueError("There's an overlap in training and validation dataset")
 
+
+def get_exp_detail_str(config):
+    """Get a summary for config using dataset_common and model params."""
+    common = config['dataset_common']['args']
+    return config['model']['args']['recurrent_type'] + '-' + common['output_features'][0] + '-' + \
+        str(common['input_seq_len']) + '-' + str(common['output_seq_len']) + '-' + common['frequency']
+
+
 def main():
     """Main trainer function."""
 
@@ -94,7 +102,7 @@ def main():
 
     config = Config()
 
-    config['logging_dir'] = os.path.join(config['logging_dir'], now_str)
+    config['logging_dir'] = os.path.join(config['logging_dir'], now_str + '-' + get_exp_detail_str(config))
     pathlib.Path(config['logging_dir']).mkdir(parents=True, exist_ok=True)
     make_logger(os.path.join(config['logging_dir'], config['exp_name'] + '.log'))
 
@@ -105,7 +113,7 @@ def main():
     valdn_dataset = config.make_module('valdn_dataset', dataset_common)
 
     model = config.make_module('model', {'input_n_features': len(dataset_common['input_features']),
-                                         'output_n_features' : len(dataset_common['output_features'])})
+                                         'output_n_features': len(dataset_common['output_features'])})
 
     optimizer = config.make_module('optimizer', {'params': model.parameters()})
 
@@ -118,15 +126,16 @@ def main():
                                              'model': model,
                                              'optimizer': optimizer,
                                              'lr_scheduler': lr_scheduler,
-                                             'loss' : loss,
+                                             'loss': loss,
                                              'logging_dir': config['logging_dir'],
                                              **dataset_common})
 
     try:
         trainer.train()
     except KeyboardInterrupt:
-        logging.debug('Keyboard interrupt detected, stoppingg training and exiting.')
+        logging.debug('Keyboard interrupt detected, validating and exiting.')
         trainer.run_validation(True, True)
+
 
 if __name__ == '__main__':
     main()

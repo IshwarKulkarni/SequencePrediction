@@ -163,7 +163,7 @@ class SequencePredictorTrainer():
         for i, op_feat in enumerate(self._output_features):
             plt.plot(tgt[..., i], label='Actual', linewidth=0.5, color=purple, linestyle='dotted')
             title = self._name.upper() + '_' + op_feat.capitalize()
-            for i, seg in enumerate(pred):
+            for seg in pred:
                 plt.plot(range(x, x + in_n), seg[0:in_n], color=orange, linewidth=.5)
                 x += in_n
                 plt.plot(range(x, x + out_n), seg[in_n:], color=green, linewidth=.5)
