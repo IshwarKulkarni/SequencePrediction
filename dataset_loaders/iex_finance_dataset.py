@@ -9,7 +9,7 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 import requests
-import torch
+from dataset_loaders.base_dataset import TrainableDataset
 
 requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
@@ -17,16 +17,14 @@ requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.
 logger = logging.getLogger(__name__)
 
 
-class IEXDataset:
+class IEXDataset(TrainableDataset):
 
     ALL_FEATURES = ["high", "low", "open", "close", "average", "volume", "numberOfTrades"]
 
     def __init__(self, data_dir: str, ticker: str, batch_size: int,
                  num_batches: int, skip_past: int, frequency: str,
                  input_features: List[str], output_features: List[str],
-                 input_seq_len: int, output_seq_len: int, overlap:bool):
-        super().__init__()
-
+                 input_seq_len: int, output_seq_len: int, overlap: bool):
         if 'IEX_Token' in os.environ:
             self._IEX_TOKEN = os.environ['IEX_Token']
         else:
@@ -65,41 +63,10 @@ class IEXDataset:
         n_days = (data.index[-1] - data.index[0]).days
         logger.info(f'Datset fetched {len(data)} rows, spanning {n_days} days from'
                     f' {self.date_range[0]}  to {self.date_range[1]}')
-        self._in_data = data[input_features].to_numpy().astype(np.float32)
-        self._out_data = data[output_features].to_numpy().astype(np.float32)
+        in_data = data[input_features].to_numpy().astype(np.float32)
+        out_data = data[output_features].to_numpy().astype(np.float32)
 
-        self._input_scale = self._in_data.mean(0) / 25
-        self._output_scale = self._out_data.mean(0) / 25
-
-        self._in_data /= self._input_scale
-        self._out_data /= self._output_scale
-
-        self._input_seq_len = input_seq_len
-        self._output_seq_len = output_seq_len
-
-        self._overlap = overlap
-
-    def __len__(self):
-        sample_len = self._input_seq_len + self._output_seq_len
-        data_len = self._in_data.shape[0]
-        if self._overlap:
-            return data_len - sample_len + 1
-        return int(data_len / sample_len)
-
-    def __getitem__(self, index):
-        if not self._overlap:
-            index = index * (self._input_seq_len + self._output_seq_len)
-        end_1 = index + self._input_seq_len
-        end_2 = end_1 + self._output_seq_len
-        ip, op = self._in_data[index:end_1], self._out_data[index:end_2]
-        return (torch.from_numpy(ip).float(), torch.from_numpy(op).float())
-
-    def scale(self, ip, op):
-        if ip is not None:
-            ip *= self._input_scale
-        if op is not None:
-            op *= self._output_scale
-        return ip, op
+        super().__init__(in_data, out_data, input_seq_len, output_seq_len, overlap)
 
     def _get_from_IEX(self, date, ticker: str):
         """Fetch the data from IEX and clean up a bit"""

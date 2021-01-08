@@ -4,7 +4,7 @@
     "trainer": {
         "name": "trainers.sequence_predictor_trainer.SequencePredictorTrainer",
         "args": {
-            "num_epochs": 200,
+            "num_epochs": 250,
             "valdn_n_epochs": 10,
             "checkpt_n_valdn": 1,
             "log_n_iter": 250,
@@ -13,29 +13,32 @@
             "log_tensorboard": true
         }
     },
+
     "model": {
         "name": "models.encoder_decoder_recurrent.EncoderDecoderRecurrent",
         "args": {
-            "recurrent_type" : "rnn",
-            "rec_hidden_size": 160,
+            "recurrent_type" : "GRU",
+            "rec_hidden_size": 128,
             "encoder_sizes": [],
             "rec_ip_size": 16,
             "num_layers" : 1,
             "decoder_sizes": [],
             "future_enc_sizes": [],
             "seperate_future_recurrent": false,
-            "perturb_init": true
+            "perturb_init": true,
+            "dropout" : 0.15
         }
     },
+
     "dataset_common": {
         "args": {
             "batch_size": 16,
-            "input_features": ["average", "high", "low"],
+            "input_features": ["high", "low", "numberOfTrades"],
             "output_features": ["average"],
-            "input_seq_len": 3,
-            "output_seq_len": 4,
+            "input_seq_len": 8,
+            "output_seq_len": 2,
             "data_dir": "data/ticker_data",
-            "frequency": "3Min",
+            "frequency": "30Min",
             "ticker": "nvda"
         }
     },
@@ -43,19 +46,21 @@
     "train_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "num_batches": 500,
-            "skip_past": 3,
+            "num_batches": 50,
+            "skip_past": 20,
             "overlap" : true
         }
     },
+
     "valdn_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "num_batches": 2,
+            "num_batches": 1,
             "skip_past": 0,
             "overlap" : false
         }
     },
+
     "loss": {
         "name": "torch.nn.MSELoss",
         "args": {
@@ -64,11 +69,10 @@
     },
 
     "optimizer": {
-        "name": "torch.optim.Adadelta",
+        "name": "torch.optim.Adam",
         "args": {
-            "lr": 2,
-            "eps": 1e-8,
-            "rho": 0.9
+            "lr": 1e-3,
+            "eps": 1e-8
         }
     },
 

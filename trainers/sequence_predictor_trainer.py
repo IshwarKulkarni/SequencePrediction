@@ -5,24 +5,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.utils.data.dataloader as dataloader
+from dataset_loaders.base_dataset import collate_batch_fn, TrainableDataset
 from torch.utils.tensorboard import SummaryWriter
 
 logger = logging.getLogger(__name__)
 
 
-def collate_batch_fn(batch):
-    xs = [i[0] for i in batch]
-    ys = [i[1] for i in batch]
-    return tuple([torch.stack(xs), torch.stack(ys)])
-
-
 class SequencePredictorTrainer():
     """Train 1D sequences."""
 
-    def __init__(self, train_dataset, valdn_dataset, **kwargs):
+    def __init__(self, train_dataset: TrainableDataset, valdn_dataset: TrainableDataset, **kwargs):
         super().__init__()
         for cfg, val in kwargs.items():
             setattr(self, '_' + cfg, val)
+
+        self._it = self.epoch = 0
+        if 'resume' in kwargs:
+            self.resume_checkpoint(kwargs['resume'])
 
         self._name = train_dataset.name
 
@@ -39,7 +38,6 @@ class SequencePredictorTrainer():
         self._writer = SummaryWriter(self._logging_dir) if self._log_tensorboard else None
 
         self._valdn_scale_fn = valdn_dataset.scale
-        self._it = self.epoch = 0
 
     def train(self):
 
@@ -65,7 +63,7 @@ class SequencePredictorTrainer():
 
                 model_ip = (x, self._output_seq_len)
                 y_hat = self._model(model_ip)
-                loss = self._loss(y_hat, y)
+                loss = self._loss(y_hat[-self._output_seq_len:], y[-self._output_seq_len:])
 
                 self._optimizer.zero_grad()
                 loss.backward()
@@ -121,25 +119,21 @@ class SequencePredictorTrainer():
     def save_checkpoint(self, is_better=False):
         suffix = self._name + '-EP_' + str(self.epoch)
         filename = os.path.join(self._logging_dir,  suffix + '.pt')
-        torch.save({'model': self._model,
-                    'epoch': self.epoch,
-                    'optim': self._optimizer.state_dict(),
-                    'lr_sched': self._lr_scheduler.state_dict()}, filename)
-        if is_better:
-            filename = os.path.join(self._logging_dir, self._name.upper() + '_best.pt')
-            torch.save({'model': self._model,
-                        'epoch': self.epoch,
+
+        def save():
+            torch.save({'model': self._model.state_dict(),
                         'optim': self._optimizer.state_dict(),
                         'lr_sched': self._lr_scheduler.state_dict()}, filename)
+        save()
+        if is_better:
+            filename = os.path.join(self._logging_dir, self._name.upper() + '_best.pt')
+            save()
 
     @torch.no_grad()
     def resume_checkpoint(self, filename):
-        if not os.path.exists(filename):
-            raise RuntimeError('Invalid checkpoint location: {}'.format(filename))
+        assert os.path.exists(filename), f'Did not find any valid checkpoints in {filename}.'
+        logger.debug(f'Loading checkpoint at {filename}')
 
-        if not os.path.exists(filename):
-            raise RuntimeError('Did not find any valid checkpoints in {}.'.format(filename))
-        logger.debug('Loading checkpoint at {}'.format(filename))
         checkpoint = torch.load(filename)
 
         self._model.load_state_dict(checkpoint['model'])
@@ -148,7 +142,6 @@ class SequencePredictorTrainer():
 
     @torch.no_grad()
     def _plot_valdn(self, pred, tgt, show, save):
-        pink = (.90, .45, .40)
         purple = (.60, .45, .90)
         orange = (.90, .40, .15)
         green = (.28, .90, .15)

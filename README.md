@@ -5,9 +5,9 @@ Running a simple Recurrent model on
 
 How to run:
 
-`python main.py  --config_file=./config_ticker.json --IEX_token=<>`
+`python main.py  --config_file=./configs/config_ticker.json --IEX_token=<>`
 
-`python main.py  --config_file=./config_currency.json`
+`python main.py  --config_file=./configs/config_currency.json`
 
 
 What to install:

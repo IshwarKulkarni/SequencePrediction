@@ -9,31 +9,22 @@ from typing import List
 import numpy as np
 import pandas as pd
 import requests
-import torch
-from torch.utils.data import Dataset
+
+from dataset_loaders.base_dataset import TrainableDataset
 
 logger = logging.getLogger(__name__)
 
-
-def collate_batch_fn(batch):
-    xs = [i[0] for i in batch]
-    ys = [i[1] for i in batch]
-    return tuple([torch.stack(xs), torch.stack(ys)])
-
-
-class CurrencyData(Dataset):
+class CurrencyData(TrainableDataset):
 
     ALL_FEATURES = ["high", "low", "open", "close", "average"]
 
-    def __init__(self, data_dir: str, country: str,
-                 num_samples: int, skip_past: int, frequency: str,
-                 input_features: List[str], output_features: List[str],
-                 input_seq_len: int, output_seq_len: int):
-        super(CurrencyData, self).__init__()
+    def __init__(self, data_dir: str, country: str, num_samples: int, skip_past: int, frequency: str,
+                 input_features: List[str], output_features: List[str], input_seq_len: int,
+                 output_seq_len: int, overlap: bool):
 
         assert frequency.upper() == '1day'.upper(), 'Only 1 day sequences are supported in Currecy dataset currently'
         assert len(input_features) == len(output_features) == 1 and output_features[0] == 'average',\
-            'Only \'average\' features are supported in Currency dataset currently'
+            'Only \'average\' feature is supported in Currency dataset currently'
 
         self.name = country.capitalize() + '-' + output_features[0]
 
@@ -53,29 +44,9 @@ class CurrencyData(Dataset):
         tot_days = num_samples + skip_past
         arr = data.to_numpy()[tot_days:]
 
-        self._in_data = arr[-tot_days:] if skip_past == 0 else arr[-tot_days:-skip_past]
+        in_data = arr[-tot_days:] if skip_past == 0 else arr[-tot_days:-skip_past]
 
-        self._input_scale = self._in_data.mean(0)
-        self._in_data /= self._input_scale
-
-        self._num_past = input_seq_len
-        self._num_future = output_seq_len
-
-    def scale(self, ip, op):
-        if ip is not None:
-            ip *= self._input_scale
-        if op is not None:
-            op *= self._input_scale
-        return ip, op
-
-    def __len__(self):
-        return len(self._in_data) - (self._num_past + self._num_future)
-
-    def __getitem__(self, index):
-        end_1 = index + self._num_past
-        end_2 = end_1 + self._num_future
-        ip, op = self._in_data[index:end_1], self._in_data[index:end_2]
-        return (torch.from_numpy(ip).float(), torch.from_numpy(op).float())
+        super().__init__(in_data, in_data, input_seq_len, output_seq_len, overlap)
 
     def _get_currency_data(self, data_dir, country, list_file):
 
