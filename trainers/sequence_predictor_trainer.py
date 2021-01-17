@@ -23,7 +23,7 @@ class SequencePredictorTrainer():
         if 'resume' in kwargs:
             self.resume_checkpoint(kwargs['resume'])
 
-        self._name = train_dataset.name
+        self._name = valdn_dataset.name
 
         self._train_dataloader = dataloader.DataLoader(train_dataset,
                                                        batch_size=self._batch_size,
@@ -103,7 +103,7 @@ class SequencePredictorTrainer():
         for (x, y) in iter(self._valdn_dataloader):
             model_ip = (x, self._output_seq_len)
             y_hat = self._model(model_ip)
-            loss = self._loss(y_hat, y)
+            loss = self._loss(y_hat[-self._output_seq_len:], y[-self._output_seq_len:])
             loss_list.append(loss)
             pred_list.append(y_hat)
             tgt_list.append(y)
@@ -117,17 +117,13 @@ class SequencePredictorTrainer():
 
     @torch.no_grad()
     def save_checkpoint(self, is_better=False):
-        suffix = self._name + '-EP_' + str(self.epoch)
-        filename = os.path.join(self._logging_dir,  suffix + '.pt')
-
-        def save():
+        def save(filename):
             torch.save({'model': self._model.state_dict(),
                         'optim': self._optimizer.state_dict(),
                         'lr_sched': self._lr_scheduler.state_dict()}, filename)
-        save()
+        save(os.path.join(self._logging_dir, self._name + '-EP_' + str(self.epoch) + '.pt'))
         if is_better:
-            filename = os.path.join(self._logging_dir, self._name.upper() + '_best.pt')
-            save()
+            save(os.path.join(self._logging_dir, self._name + '_best.pt'))
 
     @torch.no_grad()
     def resume_checkpoint(self, filename):
@@ -159,7 +155,7 @@ class SequencePredictorTrainer():
             for seg in pred:
                 plt.plot(range(x, x + in_n), seg[0:in_n], color=orange, linewidth=.5)
                 x += in_n
-                plt.plot(range(x, x + out_n), seg[in_n:], color=green, linewidth=.5)
+                plt.plot(range(x-1, x + out_n), seg[(in_n-1):], color=green, linewidth=.5)
                 x += out_n
             plt.plot([], [], color=orange, linewidth=.5, label='Predicted@Input')
             plt.plot([], [], color=green, linewidth=.5, label='Predicted@Output')

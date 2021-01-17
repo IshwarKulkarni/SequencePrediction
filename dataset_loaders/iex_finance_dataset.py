@@ -22,9 +22,9 @@ class IEXDataset(TrainableDataset):
     ALL_FEATURES = ["high", "low", "open", "close", "average", "volume", "numberOfTrades"]
 
     def __init__(self, data_dir: str, ticker: str, batch_size: int,
-                 num_batches: int, skip_past: int, frequency: str,
+                 num_batches: int, skip_days: int, frequency: str,
                  input_features: List[str], output_features: List[str],
-                 input_seq_len: int, output_seq_len: int, overlap: bool):
+                 input_seq_len: int, output_seq_len: int, overlap: bool, **kwargs):
         if 'IEX_Token' in os.environ:
             self._IEX_TOKEN = os.environ['IEX_Token']
         else:
@@ -45,7 +45,7 @@ class IEXDataset(TrainableDataset):
         input_features = [v.strip() for v in input_features]
         output_features = [v.strip() for v in output_features]
 
-        assert skip_past >= 0, "Data fetching cannot begin from future"
+        assert skip_days >= 0, "Data fetching cannot begin from future"
         bad_features = [f for f in input_features if f not in IEXDataset.ALL_FEATURES]
         assert not bad_features, f"Some unrecognized input features requested: {bad_features}."
         bad_features = [f for f in output_features if f not in IEXDataset.ALL_FEATURES]
@@ -56,7 +56,7 @@ class IEXDataset(TrainableDataset):
         else:
             num_samples = (num_batches * batch_size) * (input_seq_len + output_seq_len)
         data = self._get_intra_day(ticker, frequency=frequency,
-                                   num_days_to_skip=skip_past, num_samples=num_samples)
+                                   num_days_to_skip=skip_days, num_samples=num_samples)
 
         self.date_range = (data.index[0], data.index[-1])
 
@@ -112,7 +112,7 @@ class IEXDataset(TrainableDataset):
         rframe = pd.DataFrame()
         frame = frame.set_index('datetime').resample(freq)
         rframe['high'] = frame['high'].max()
-        rframe['low'] = frame['high'].min()
+        rframe['low'] = frame['low'].min()
         rframe['open'] = frame['open'].first()
         rframe['close'] = frame['close'].last()
         rframe['average'] = frame['average'].mean()

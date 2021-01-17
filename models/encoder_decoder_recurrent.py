@@ -50,7 +50,7 @@ class SimpleRecurrentCell(nn.Module):
             self._future_rec = recurrent_cell_type(input_n_features, rec_hidden_size)
         else:
             self._future_rec = self._past_rec
-            logger.info('Sharing LSTM weights for past and future encoding')
+            logger.info('Sharing recurrent weights for past and future encoding')
         self._decoder = nn.Linear(rec_hidden_size, output_n_features)
 
         self._rnn_hidden_size = rec_hidden_size
@@ -75,10 +75,9 @@ class SimpleRecurrentCell(nn.Module):
             return generator()
         raise ValueError('Only 1 or 2 items in state are returned')
 
-
     def _log_module(self, rec_type):
         assert all([k[0] == '_' for k in self._modules.keys()]), 'Parameters need to start with "_"'
-        k_v = {k[1:] : sum(p.numel() for p in v.parameters()) for k, v in self._modules.items()}
+        k_v = {k[1:]: sum(p.numel() for p in v.parameters()) for k, v in self._modules.items()}
         if self._future_rec == self._past_rec:
             k_v.pop('future_rec')
         log_str = f'Model {type(self).__name__} with recurrent type "{rec_type}" '
@@ -112,7 +111,8 @@ class EncoderDecoderRecurrentCell(SimpleRecurrentCell):
 
     def __init__(self, recurrent_type: str, input_n_features: int, rec_ip_size: int,
                  rec_hidden_size: int, output_n_features: int, perturb_init: bool, **kwargs):
-        super().__init__(recurrent_type, rec_ip_size, rec_hidden_size, output_n_features, perturb_init, **kwargs)
+        super().__init__(recurrent_type, rec_ip_size, rec_hidden_size, output_n_features,
+                         perturb_init, **kwargs)
 
         self._encoder = make_lin_seq(input_n_features, rec_ip_size, kwargs.get('encoder_sizes', []))
         self._fut_encoder = make_lin_seq(rec_hidden_size, rec_ip_size, kwargs.get('future_enc_sizes', []))
@@ -155,7 +155,8 @@ class EncoderDecoderRecurrent(EncoderDecoderRecurrentCell):
         recurrent_class_type, _, self._items_in_state = get_recurrent_type(recurrent_type)
 
         self._num_layers = kwargs.get('num_layers', 1)
-        self._past_rec = recurrent_class_type(rec_ip_size, rec_hidden_size, dropout=kwargs.get('dropout', 0.0),
+        dropout = kwargs.get('dropout', 0.0)
+        self._past_rec = recurrent_class_type(rec_ip_size, rec_hidden_size, dropout=dropout,
                                               batch_first=True, num_layers=self._num_layers)
 
         if type(self) == __class__:

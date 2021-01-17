@@ -46,18 +46,22 @@ class Config:
         self.config[key] = value
         return self.config
 
-    def make_module(self, config_module, other_args=None):
+    def make_module(self, config_module, other_args=None, module_index=None):
         """Make a module in the format we have in config, if not return None."""
         if config_module not in self.config:
             return None
 
-        full_class_name = self.config[config_module]['name']
+        if module_index is None:
+            full_class_name = self.config[config_module]['name']
+            args = self.config[config_module]['args']
+        else:
+            full_class_name = self.config[config_module][module_index]['name']
+            args = self.config[config_module][module_index]['args']
 
         class_type = make_class_from_module(full_class_name)
 
-        args = self.config[config_module]['args']
         if other_args:
-            args.update(other_args)
+            args = dict(list(other_args.items()) + list(args.items()))
         return class_type(**args)
 
     def log_self(self):
@@ -109,7 +113,19 @@ def main():
     config.log_self()
 
     dataset_common = config['dataset_common']['args']
-    train_dataset = config.make_module('train_dataset', dataset_common)
+
+    if isinstance(config.config['train_dataset'], list):
+        assert 'dataset_mixer' in config.config.keys(), '"dataset_mixer" needed in config for list of train_datasets'
+        n = len(config['train_dataset'])
+        for dataset in config.config['train_dataset']:
+            for attr in ["input_features", "output_features", "input_seq_len", "output_seq_len"]:
+                assert attr not in dataset['args'], f'attribute {attr} can only be dfined in dataset_common'
+
+        datasets = [config.make_module('train_dataset', dataset_common, i) for i in range(n)]
+        train_dataset = config.make_module('dataset_mixer', {'datasets': datasets})
+    else:
+        train_dataset = config.make_module('train_dataset', dataset_common)
+
     valdn_dataset = config.make_module('valdn_dataset', dataset_common)
 
     model = config.make_module('model', {'input_n_features': len(dataset_common['input_features']),

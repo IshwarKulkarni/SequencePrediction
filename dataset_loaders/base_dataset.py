@@ -1,6 +1,10 @@
+import logging
+from typing import List
 
-from torch.utils.data import Dataset
 import torch
+from torch.utils.data import Dataset
+
+logger = logging.getLogger(__name__)
 
 
 def collate_batch_fn(batch):
@@ -47,3 +51,27 @@ class TrainableDataset(Dataset):
         if op is not None:
             op *= self._output_scale
         return ip, op
+
+
+class DatasetMixer(torch.utils.data.Dataset):
+    def __init__(self, datasets: List[TrainableDataset]):
+
+        self.datasets = []
+        self.tot_len = 0
+        for d in datasets:
+            self.datasets.append((self.tot_len, d))
+            self.tot_len += len(d)
+        self.datasets.reverse()
+        self._name = '-'.join([d.name for d in datasets])
+        logging.info(f'Dataset combining {len(datasets)} datasets resulting in {self.tot_len} total rows')
+
+        self.name = '-'.join(d.name.upper() for d in datasets)
+
+    def __getitem__(self, index):
+        for offset, dataset in self.datasets:
+            if index + 1 > offset:
+                return dataset[index - offset]
+        raise ValueError(f'Index offset {index} out of bounds')
+
+    def __len__(self):
+        return self.tot_len

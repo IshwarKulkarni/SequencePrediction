@@ -18,14 +18,14 @@
         "name": "models.encoder_decoder_recurrent.EncoderDecoderRecurrent",
         "args": {
             "recurrent_type" : "GRU",
-            "rec_hidden_size": 128,
-            "encoder_sizes": [],
+            "rec_hidden_size": 160,
+            "encoder_sizes": [8],
             "rec_ip_size": 16,
-            "num_layers" : 1,
-            "decoder_sizes": [],
-            "future_enc_sizes": [],
+            "num_layers" : 2,
+            "decoder_sizes": [8],
+            "future_enc_sizes": [8],
             "seperate_future_recurrent": false,
-            "perturb_init": true,
+            "perturb_init": false,
             "dropout" : 0.15
         }
     },
@@ -33,31 +33,43 @@
     "dataset_common": {
         "args": {
             "batch_size": 16,
-            "input_features": ["high", "low", "numberOfTrades"],
-            "output_features": ["average"],
+            "input_features": ["open", "close"],
+            "output_features": ["high"],
             "input_seq_len": 8,
-            "output_seq_len": 2,
+            "output_seq_len": 3,
             "data_dir": "data/ticker_data",
             "frequency": "30Min",
-            "ticker": "nvda"
-        }
-    },
-
-    "train_dataset": {
-        "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
-        "args": {
-            "num_batches": 50,
-            "skip_past": 20,
+            "num_batches" : 50,
+            "skip_days" : 5,
+            "pre_post_mkt" : true,
             "overlap" : true
         }
     },
 
+    "dataset_mixer":
+    {
+        "name": "dataset_loaders.base_dataset.DatasetMixer",
+        "args" : {}
+    },
+
+    "train_dataset": [
+        {
+            "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
+            "args": {"ticker": "nvda"}
+        },
+        {
+            "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
+            "args": {"ticker" : "amd"}
+        }
+    ],
+
     "valdn_dataset": {
         "name": "dataset_loaders.iex_finance_dataset.IEXDataset",
         "args": {
-            "num_batches": 1,
-            "skip_past": 0,
-            "overlap" : false
+            "num_days" : 5,
+            "skip_days" : 0,
+            "overlap" : false,
+            "ticker" : "nvda"
         }
     },
 
